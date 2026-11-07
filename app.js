@@ -109,7 +109,7 @@ let TRACKS = {};
 const ROAD_LA = [[98.9862, 8.0991], [99.005, 8.1], [99.07, 8.069], [99.159, 8.008], [99.204, 7.974], [99.211, 7.927], [99.204, 7.832], [99.187, 7.731], [99.153, 7.69], [99.115, 7.66], [99.07, 7.64], [99.0233, 7.6448]];
 
 async function loadRoutes() {
-  try { TRACKS = await (await fetch("assets/routes.json")).json(); legs = buildLegs(); } catch (_) {}
+  try { TRACKS = await (await fetch("assets/routes.json?v=" + window.__V)).json(); legs = buildLegs(); } catch (_) {}
 }
 
 /** The line a leg follows on the globe, from the start to the end. */

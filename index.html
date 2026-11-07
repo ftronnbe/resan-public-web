@@ -28,7 +28,13 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="style.css?v=5">
+<style id="pre">body{visibility:hidden}</style>
+<script>
+// Always fetch the current version stamp (never cached), then load CSS and JS with it, so a reload picks up every update.
+window.__ready=(async()=>{let v=Date.now();try{v=(await (await fetch("version.json",{cache:"no-store"})).json()).v}catch(_){}
+window.__V=v;await new Promise(r=>{const l=document.createElement("link");l.rel="stylesheet";l.href="style.css?v="+v;l.onload=l.onerror=r;document.head.appendChild(l)});
+document.getElementById("pre").remove();})();
+</script>
 </head>
 <body>
 <main id="login" class="login">
@@ -99,6 +105,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
-<script src="app.js?v=6"></script>
+<script>window.__ready.then(()=>{const s=document.createElement("script");s.src="app.js?v="+window.__V;document.body.appendChild(s)})</script>
 </body>
 </html>
