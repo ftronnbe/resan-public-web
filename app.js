@@ -450,6 +450,19 @@ function renderTimeline() {
     items.push({ ms: h.in, local: h.inLocal, icon: "🛏️", what: `Incheckning ${h.name}`, info: T.places[h.place].name });
     items.push({ ms: h.out, local: h.outLocal, icon: "🧳", what: `Utcheckning ${h.name}`, info: T.places[h.place].name });
   }
+  // Roughly when the family reaches each hotel: landing, passport control and the drive (Mumbai takes longest).
+  const flightsSorted = [...T.flights].sort((x, y) => x.dep - y.dep), seenHotel = new Set();
+  for (const h of T.hotels) {
+    if (seenHotel.has(h.name)) continue; seenHotel.add(h.name);
+    const city = h.place === "LANTA" ? "KBV" : h.place;
+    const f = flightsSorted.find((x) => x.to === city && x.arr > h.in - 14 * H && x.arr < h.out); if (!f) continue;
+    const ms = f.arr + (h.place === "LANTA" ? 130 : h.place === "BOM" ? 90 : 65) * MIN;
+    const p = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: h.zone, hour12: false, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).formatToParts(ms).map((x) => [x.type, x.value]));
+    items.push({ ms, local: `${p.year}-${p.month}-${p.day}T${p.hour === "24" ? "00" : p.hour}:${p.minute}`, icon: "📍", what: `Framme på ${h.name} (ca)`, info: "Uppskattat efter landning, passkontroll och bilfärd" });
+  }
+  for (const t of TBD_STAYS) {
+    items.push({ ms: new Date(t.inLocal + "T13:00:00Z").getTime(), local: t.inLocal + "T13:00", icon: "📍", what: `Framme i ${T.places[t.place].name} (ca)`, info: "Uppskattat: avresa från Mumbai på förmiddagen, cirka 4 timmar i bil" });
+  }
   for (const t of TBD_STAYS) {
     items.push({ ms: new Date(t.inLocal + "T15:00:00Z").getTime(), local: t.inLocal, icon: "🛏️", what: `Hotell i ${T.places[t.place].name}: TBD`, info: "Inte bestämt än" });
   }
