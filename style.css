@@ -30,7 +30,7 @@ h1, h2, p { margin: 0; }
 .top h1 { font-size: clamp(24px, 5vw, 34px); letter-spacing: -.02em; line-height: 1.15; }
 .ghost { font: inherit; font-size: 14px; color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; cursor: pointer; }
 .hero { position: relative; max-width: 1000px; margin: 0 auto; padding: 0 max(8px, env(safe-area-inset-left)); }
-#globe { width: 100%; height: min(112vw, 700px); display: block; cursor: grab; touch-action: pan-y; }
+#globe { width: 100%; height: min(112vw, 700px); display: block; cursor: grab; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 #globe:active { cursor: grabbing; }
 .status { position: relative; margin: -28px max(10px, env(safe-area-inset-left)) 0; padding: 18px 20px; display: flex; flex-direction: column; gap: 4px; }
 .status .big { font-size: clamp(22px, 5vw, 30px); font-weight: 800; letter-spacing: -.02em; line-height: 1.2; }
@@ -178,3 +178,7 @@ button:active { transform: scale(.94); }
   *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
   .reveal { opacity: 1; transform: none; }
 }
+
+/* the globe takes every touch that starts on it (rotate, pinch); the page scrolls from anywhere else */
+.hero { overscroll-behavior: contain; }
+@media (max-width: 760px) { #globe { height: min(100vw, 520px); } }
