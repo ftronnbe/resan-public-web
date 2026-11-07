@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#070b16">
+<title>Resan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main id="login" class="login">
+  <form id="loginForm" class="login-card" autocomplete="on">
+    <div class="login-mark" aria-hidden="true">
+      <svg viewBox="0 0 48 48" width="44" height="44"><circle cx="24" cy="24" r="18" fill="none" stroke="currentColor" stroke-width="2"/><path d="M6 24h36M24 6c-8 8-8 28 0 36M24 6c8 8 8 28 0 36" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+    </div>
+    <h1>Följ med på resan</h1>
+    <p class="muted">Thailand och Indien, november 2026. Logga in för att se var vi är.</p>
+    <label for="user">Användarnamn</label>
+    <input id="user" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+    <label for="pass">Lösenord</label>
+    <input id="pass" name="password" type="password" autocomplete="current-password" required>
+    <button id="loginBtn" type="submit">Logga in</button>
+    <p id="loginError" class="error" role="alert" hidden></p>
+  </form>
+</main>
+
+<div id="app" hidden>
+  <header class="top">
+    <div>
+      <p class="eyebrow">Resan</p>
+      <h1 id="title"></h1>
+    </div>
+    <button id="logout" class="ghost" type="button">Logga ut</button>
+  </header>
+
+  <section class="hero">
+    <canvas id="globe" aria-label="Jordglob med resvägen"></canvas>
+    <div class="status glass" id="status"></div>
+  </section>
+
+  <section class="wrap">
+    <h2>Var och när just nu</h2>
+    <div class="places" id="places"></div>
+
+    <h2>Flygen</h2>
+    <div class="cards" id="flights"></div>
+
+    <h2>Hotellen</h2>
+    <div class="cards" id="hotels"></div>
+
+    <h2>Dag för dag</h2>
+    <div class="timeline" id="timeline"></div>
+
+    <p class="foot">Tiderna är lokal tid på platsen. Vädret visar timmen med bäst väder idag, hämtat från Open-Meteo.</p>
+  </section>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
