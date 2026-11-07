@@ -53,7 +53,8 @@ def public(trip):
     transfers = []
     for t in trip["transfers"]:
         w, wLocal, zone = parse(t["when"])
-        transfers.append({"title": t["title"], "from": t["from"], "to": t["to"], "when": w, "whenLocal": wLocal, "zone": zone, "timed": "T" in wLocal})
+        transfers.append({"title": t["title"], "from": t["from"], "to": t["to"], "when": w, "whenLocal": wLocal, "zone": zone, "timed": "T" in wLocal,
+                          "driveMin": t.get("driveMinutes"), "driveKm": t.get("driveKm")})
     events = []
     for e in trip["events"]:
         s, sLocal, zone = parse(e["start"])

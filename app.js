@@ -196,12 +196,12 @@ function buildSegments() {
     if (!from || !to) continue;
     if (/^Hämtning/.test(t.title)) {                       // from the airport to the hotel, after landing and passport control
       const f = flights.find((x) => x.to === from && Math.abs(x.arr - t.when) < 36 * H); if (!f) continue;
-      const start = f.arr + 40 * MIN, dur = (to === "LANTA" ? 90 : 25) * MIN;
+      const start = f.arr + 40 * MIN, dur = (t.driveMin || (to === "LANTA" ? 150 : 25)) * MIN;
       segs.push({ kind: "transfer", start, end: start + dur, from, to, label: t.title.replace(/^Hämtning /, "Transfer ") });
     } else if (/flygplats/i.test(t.to)) {                  // from the hotel to the airport, in time for check-in
       const f = flights.find((x) => x.from === to && Math.abs(x.dep - t.when) < 36 * H); if (!f) continue;
       const end = f.dep - 2.5 * H;
-      segs.push({ kind: "transfer", start: end - 90 * MIN, end, from, to, label: t.title });
+      segs.push({ kind: "transfer", start: end - (t.driveMin || 90) * MIN, end, from, to, label: t.title });
     }
   }
   for (const f of flights) segs.push({ kind: "arrival", start: f.arr, end: f.arr + 40 * MIN, place: f.to === "KBV" ? "KBV" : f.to, f });
@@ -436,7 +436,7 @@ function renderTimeline() {
   for (const f of T.flights) {
     items.push({ ms: f.dep, local: f.depLocal, icon: "✈️", what: `${f.number} ${T.places[f.from].name} → ${T.places[f.to].name}`, info: `${f.airline}, landar ${hhmm(f.arrLocal)} lokal tid` });
   }
-  for (const t of T.transfers) items.push({ ms: t.when, local: t.whenLocal, icon: "🚗", what: t.title, info: "" });
+  for (const t of T.transfers) items.push({ ms: t.when, local: t.whenLocal, icon: "🚗", what: t.title, info: t.driveMin ? `Cirka ${Math.floor(t.driveMin / 60) ? Math.floor(t.driveMin / 60) + " h " : ""}${t.driveMin % 60 ? (t.driveMin % 60) + " min" : ""} i bil${t.driveKm ? ` · ${t.driveKm} km` : ""}`.replace(" h  i", " h i") : "" });
   for (const h of T.hotels) {
     items.push({ ms: h.in, local: h.inLocal, icon: "🛏️", what: `Incheckning ${h.name}`, info: T.places[h.place].name });
     items.push({ ms: h.out, local: h.outLocal, icon: "🧳", what: `Utcheckning ${h.name}`, info: T.places[h.place].name });
