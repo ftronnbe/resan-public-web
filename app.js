@@ -50,11 +50,20 @@ $("loginForm").addEventListener("submit", async (e) => {
   btn.disabled = false; btn.textContent = "Logga in";
 });
 document.querySelectorAll(".tabbar button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
+// Opens the program at today (or the next day with something left), with what has already happened dimmed above.
+function scrollPlanToNow() {
+  const g = document.querySelector("#timeline .day-group.today") || document.querySelector("#timeline .day-group:not(.past)");
+  if (!g) return;
+  const first = g.querySelector(".item:not(.gone)") || g;
+  const top = (g.classList.contains("today") ? first : g).getBoundingClientRect().top + window.scrollY - 110;
+  window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+}
 function showTab(id) {
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.id === `tab-${id}`));
   const shown = document.getElementById(`tab-${id}`); if (shown) shown.querySelectorAll(".rise").forEach((n) => { n.style.animation = "none"; void n.offsetWidth; n.style.animation = ""; });
   document.querySelectorAll(".tabbar button").forEach((x) => x.classList.toggle("on", x.dataset.tab === id));
   window.scrollTo({ top: 0 });
+  if (id === "plan") requestAnimationFrame(scrollPlanToNow);
   requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
 }
 $("logout").addEventListener("click", () => { try { sessionStorage.removeItem("resan.k"); } catch (_) {} location.reload(); });
@@ -457,7 +466,7 @@ function renderTimeline() {
     for (const i of list) {
       const t = hhmm(i.local);
       const thumb = /Bröllop|Mottagning/.test(i.what) ? `<img class="thumb" src="assets/places/venue-gulabnagri${/Mottagning/.test(i.what) ? "-night" : ""}.jpg" alt="" loading="lazy">` : "";
-      wrap.appendChild(el("div", "item glass", `<div class="t${t ? "" : " none"}">${t || (i.tbd ? "TBD" : "hela dagen")}</div><div><div class="what">${i.icon} ${esc(i.what)}</div>${i.info ? `<div class="info">${esc(i.info)}</div>` : ""}${thumb}</div>`));
+      wrap.appendChild(el("div", `item glass${i.ms < now ? " gone" : ""}`, `<div class="t${t ? "" : " none"}">${t || (i.tbd ? "TBD" : "hela dagen")}</div><div><div class="what">${i.icon} ${esc(i.what)}</div>${i.info ? `<div class="info">${esc(i.info)}</div>` : ""}${thumb}</div>`));
     }
     g.appendChild(wrap); box.appendChild(g);
   }

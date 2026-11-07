@@ -186,3 +186,5 @@ button:active { transform: scale(.94); }
 .card.tbd { border-style: dashed; }
 .card.tbd .photo { filter: grayscale(.7) brightness(.8); }
 .tag.tbd { background: rgba(255,255,255,.1); color: var(--muted); }
+
+.item.gone { opacity: .45; filter: saturate(.6); }
