@@ -445,7 +445,9 @@ function drawPlane(ctx, x, y, angle, scale) {
   ctx.restore();
 }
 
-let rotation = [-40, -20, 0], dragging = false, lastTouch = 0, lastZoomTouch = 0, zoom = 1, land = null;
+// The first view is the whole globe from far away; then it glides in to where the family is.
+const INTRO = { hold: 500, glide: 2200, zoom: 0.82, rotation: [-58, -22] };
+let rotation = [INTRO.rotation[0], INTRO.rotation[1], 0], dragging = false, lastTouch = 0, lastZoomTouch = 0, zoom = INTRO.zoom, land = null, introStart = null, introFrom = null;
 
 async function initGlobe() {
   const canvas = $("globe");
@@ -490,9 +492,18 @@ async function initGlobe() {
   const frame = () => {
     const r = canvas.getBoundingClientRect(), W = r.width, H = r.height, now = Date.now();
     const act = activityAt(now), target = { pos: act.pos };
-    if (now - lastZoomTouch > 6000) zoom += (act.zoom - zoom) * 0.035;
+    introStart = introStart ?? now;
+    const it = (now - introStart - INTRO.hold) / INTRO.glide;
+    const goal0 = [-target.pos[0], -target.pos[1]];
+    if (it < 1 && !dragging) {
+      // easeInOutCubic from the far view to the family's place
+      const k = it <= 0 ? 0 : it < 0.5 ? 4 * it ** 3 : 1 - ((-2 * it + 2) ** 3) / 2;
+      let dl = goal0[0] - INTRO.rotation[0]; dl = ((dl + 540) % 360) - 180;
+      zoom = INTRO.zoom + (act.zoom - INTRO.zoom) * k;
+      rotation = [INTRO.rotation[0] + dl * k, INTRO.rotation[1] + (goal0[1] - INTRO.rotation[1]) * k, 0];
+    } else if (now - lastZoomTouch > 6000) zoom += (act.zoom - zoom) * 0.035;
     proj.scale(Math.min(W, H) * 0.47 * zoom);
-    if (!dragging && now - lastTouch > 3000) {
+    if (it >= 1 && !dragging && now - lastTouch > 3000) {
       const goal = [-target.pos[0], -target.pos[1]];
       let dl = goal[0] - rotation[0]; dl = ((dl + 540) % 360) - 180;
       rotation = [rotation[0] + dl * 0.045, rotation[1] + (goal[1] - rotation[1]) * 0.045, 0];
