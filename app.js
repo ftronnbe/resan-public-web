@@ -520,10 +520,10 @@ async function initGlobe() {
 
   // Drag to turn the globe; it drifts back to the family when you let go.
   let start = null;
-  canvas.addEventListener("pointerdown", (e) => { dragging = true; start = { x: e.clientX, y: e.clientY, r: rotation.slice() }; canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener("pointerdown", (e) => { dragging = true; start = { x: e.clientX, y: e.clientY, r: rotation.slice(), k: 57.2958 / proj.scale() }; canvas.setPointerCapture(e.pointerId); });
   canvas.addEventListener("pointermove", (e) => {
     if (!dragging || pointers.size > 1) return;
-    const k = 0.35; rotation = [start.r[0] + (e.clientX - start.x) * k, Math.max(-80, Math.min(80, start.r[1] - (e.clientY - start.y) * k)), 0]; lastTouch = Date.now();
+    const k = start.k; rotation = [start.r[0] + (e.clientX - start.x) * k, Math.max(-80, Math.min(80, start.r[1] - (e.clientY - start.y) * k)), 0]; lastTouch = Date.now();
   });
   const setZoom = (z) => { zoom = Math.max(0.8, Math.min(8, z)); lastZoomTouch = Date.now(); lastTouch = Date.now(); };
   canvas.addEventListener("wheel", (e) => { e.preventDefault(); setZoom(zoom * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0025))); }, { passive: false });
