@@ -46,6 +46,13 @@ $("loginForm").addEventListener("submit", async (e) => {
   catch (_) { err.textContent = "Fel användarnamn eller lösenord."; err.hidden = false; }
   btn.disabled = false; btn.textContent = "Logga in";
 });
+document.querySelectorAll(".tabbar button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
+function showTab(id) {
+  document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.id === `tab-${id}`));
+  document.querySelectorAll(".tabbar button").forEach((x) => x.classList.toggle("on", x.dataset.tab === id));
+  window.scrollTo({ top: 0 });
+  requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
+}
 $("logout").addEventListener("click", () => { try { sessionStorage.removeItem("resan.k"); } catch (_) {} location.reload(); });
 resume().then((d) => { if (d) start(d); });
 
@@ -153,6 +160,7 @@ function renderPlaces() {
     const p = T.places[id];
     const n = el("div", "place glass");
     n.id = `place-${id}`;
+    n.style.setProperty("--bg-img", `url(assets/places/${{ ARN: "arn", LANTA: "kbv", BKK: "bkk", BOM: "bom", NASHIK: "nashik" }[id]}.jpg)`);
     n.innerHTML = `<div class="name">${esc(p.name)}</div><div class="country">${esc(p.country)}</div><div class="clock" data-clock="${id}">--:--</div><div class="day" data-day="${id}"></div><div class="wx" data-wx="${id}"><span class="muted">Hämtar väder…</span></div>`;
     box.appendChild(n);
   }
@@ -215,6 +223,13 @@ async function loadWeather() {
 
 /* ---------- Flights, hotels, timeline ---------- */
 
+function planeImage(aircraft) {
+  const a = (aircraft || "").toUpperCase();
+  return a.includes("A350") ? "assets/planes/a350.jpg" : a.includes("A330") ? "assets/planes/a330.jpg" : a.includes("A320") ? "assets/planes/a320.jpg" : null;
+}
+
+const HOTEL_PHOTO = { "Twin Bay Resort": "hotel-twinbay", "Grande Centre Point Sukhumvit 55": "hotel-grande", "Fairmont Mumbai": "hotel-fairmont" };
+
 function flightBadge(f, live) {
   const st = f.live;
   if (live) return `<span class="tag live">I luften</span>`;
@@ -233,11 +248,14 @@ function timeBlock(ms, plannedMs, zone, local, label) {
 
 function renderFlights() {
   const box = $("flights"); box.innerHTML = ""; const now = Date.now();
+  const nextF = T.flights.find((x) => now <= x.arr);
   for (const f of T.flights) {
-    const live = now >= f.dep && now <= f.arr, past = now > f.arr;
+    const live = now >= f.dep && now <= f.arr, past = now > f.arr, isNext = f === nextF;
     const st = f.live, gate = st && (st.depGate || st.depTerminal) ? `Terminal ${esc(st.depTerminal || "?")}${st.depGate ? `, gate ${esc(st.depGate)}` : ""}` : "";
-    const n = el("div", `card glass${past ? " past" : ""}`);
-    n.innerHTML = `<div class="row"><span class="num">${esc(f.number)}</span>${flightBadge(f, live)}</div>
+    const n = el("div", `card glass${isNext ? " next" : " dim"}`);
+    const img = planeImage(f.aircraft);
+    n.innerHTML = `<div class="row"><span class="num">${esc(f.number)}</span>${isNext && !live ? '<span class="tag next">Nästa flyg</span>' : flightBadge(f, live)}</div>
+      ${img ? `<img class="plane-img" src="${img}" alt="${esc(f.aircraft)}" loading="lazy">` : ""}
       <div class="route">${esc(T.places[f.from === "KBV" ? "KBV" : f.from].name)} → ${esc(T.places[f.to].name)}</div>
       <div class="times"><div>${timeBlock(f.dep, f.depPlan ?? f.dep, f.depZone, f.depLocal, f.fromName)}</div><div style="text-align:right">${timeBlock(f.arr, f.arrPlan ?? f.arr, f.arrZone, f.arrLocal, f.toName)}</div></div>
       <div class="sub">${esc(f.airline)}${f.aircraft ? ` · ${esc(f.aircraft)}` : ""}${gate ? ` · ${gate}` : ""}</div>
@@ -253,8 +271,9 @@ function renderHotels() {
   for (const h of seen.values()) {
     const nights = Math.round((new Date(h.outLocal.slice(0, 10)) - new Date(h.inLocal.slice(0, 10))) / 864e5);
     const here = now >= h.in && now <= h.out, past = now > h.out;
-    const n = el("div", `card glass${past ? " past" : ""}`);
-    n.innerHTML = `<div class="row"><span class="num" style="font-size:18px">${esc(h.name)}</span><span class="tag ${here ? "live" : "hotel"}">${here ? "Vi bor här" : `${nights} ${nights === 1 ? "natt" : "nätter"}`}</span></div>
+    const photo = HOTEL_PHOTO[h.name];
+    const n = el("div", `card glass${past ? " past" : ""}${photo ? " has-photo" : ""}`);
+    n.innerHTML = `${photo ? `<img class="photo" src="assets/places/${photo}.jpg" alt="${esc(h.name)}" loading="lazy">` : ""}<div class="row"><span class="num" style="font-size:18px">${esc(h.name)}</span><span class="tag ${here ? "live" : "hotel"}">${here ? "Vi bor här" : `${nights} ${nights === 1 ? "natt" : "nätter"}`}</span></div>
       <div class="route">${esc(T.places[h.place].name)}, ${esc(T.places[h.place].country)}</div>
       <div class="sub">${cap(dayLabel(h.inLocal))} till ${dayLabel(h.outLocal)}</div>`;
     box.appendChild(n);
@@ -283,7 +302,8 @@ function renderTimeline() {
     const wrap = el("div", "items");
     for (const i of list) {
       const t = hhmm(i.local);
-      wrap.appendChild(el("div", "item glass", `<div class="t${t ? "" : " none"}">${t || "hela dagen"}</div><div><div class="what">${i.icon} ${esc(i.what)}</div>${i.info ? `<div class="info">${esc(i.info)}</div>` : ""}</div>`));
+      const thumb = /Bröllop|Mottagning/.test(i.what) ? `<img class="thumb" src="assets/places/venue-gulabnagri${/Mottagning/.test(i.what) ? "-night" : ""}.jpg" alt="" loading="lazy">` : "";
+      wrap.appendChild(el("div", "item glass", `<div class="t${t ? "" : " none"}">${t || "hela dagen"}</div><div><div class="what">${i.icon} ${esc(i.what)}</div>${i.info ? `<div class="info">${esc(i.info)}</div>` : ""}${thumb}</div>`));
     }
     g.appendChild(wrap); box.appendChild(g);
   }

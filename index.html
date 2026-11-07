@@ -38,26 +38,40 @@
     <button id="logout" class="ghost" type="button">Logga ut</button>
   </header>
 
-  <section class="hero">
-    <canvas id="globe" aria-label="Jordglob med resvägen"></canvas>
-    <div class="status glass" id="status"></div>
-  </section>
+  <div id="tab-overview" class="tab active">
+    <section class="hero">
+      <canvas id="globe" aria-label="Jordglob med resvägen"></canvas>
+      <div class="status glass" id="status"></div>
+    </section>
+  </div>
 
-  <section class="wrap">
-    <h2>Var och när just nu</h2>
-    <div class="places" id="places"></div>
+  <div id="tab-places" class="tab">
+    <section class="wrap">
+      <h2>Var och när just nu</h2>
+      <div class="places" id="places"></div>
+      <p class="foot">Tiderna är lokal tid på platsen. Vädret visar timmen med bäst väder idag, hämtat från Open-Meteo.</p>
+    </section>
+  </div>
 
-    <h2>Flygen</h2>
-    <div class="cards" id="flights"></div>
+  <div id="tab-flights" class="tab">
+    <section class="wrap"><h2>Flygen</h2><div class="cards" id="flights"></div></section>
+  </div>
 
-    <h2>Hotellen</h2>
-    <div class="cards" id="hotels"></div>
+  <div id="tab-hotels" class="tab">
+    <section class="wrap"><h2>Hotellen</h2><div class="cards" id="hotels"></div></section>
+  </div>
 
-    <h2>Dag för dag</h2>
-    <div class="timeline" id="timeline"></div>
+  <div id="tab-plan" class="tab">
+    <section class="wrap"><h2>Dag för dag</h2><div class="timeline" id="timeline"></div></section>
+  </div>
 
-    <p class="foot">Tiderna är lokal tid på platsen. Vädret visar timmen med bäst väder idag, hämtat från Open-Meteo.</p>
-  </section>
+  <nav class="tabbar" aria-label="Avsnitt">
+    <button data-tab="overview" class="on" type="button"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c-4 4-4 14 0 18M12 3c4 4 4 14 0 18"/></svg>Översikt</button>
+    <button data-tab="places" type="button"><svg viewBox="0 0 24 24"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>Platser</button>
+    <button data-tab="flights" type="button"><svg viewBox="0 0 24 24"><path d="M21 15.5v-2L13.5 9V3.8c0-.8-.7-1.8-1.5-1.8s-1.5 1-1.5 1.8V9L3 13.5v2l7.5-2.2V18l-2 1.5V21l3.5-1 3.5 1v-1.5l-2-1.5v-4.7z"/></svg>Flyg</button>
+    <button data-tab="hotels" type="button"><svg viewBox="0 0 24 24"><path d="M3 18V6M3 14h18v4M21 14v-2a3 3 0 0 0-3-3h-7v5"/><circle cx="7" cy="10.5" r="1.6"/></svg>Hotell</button>
+    <button data-tab="plan" type="button"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>Program</button>
+  </nav>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
