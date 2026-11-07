@@ -436,7 +436,7 @@ function renderTimeline() {
   for (const f of T.flights) {
     items.push({ ms: f.dep, local: f.depLocal, icon: "✈️", what: `${f.number} ${T.places[f.from].name} → ${T.places[f.to].name}`, info: `${f.airline}, landar ${hhmm(f.arrLocal)} lokal tid` });
   }
-  for (const t of T.transfers) items.push({ ms: t.when, local: t.whenLocal, icon: "🚗", what: t.title, info: t.driveMin ? `Cirka ${Math.floor(t.driveMin / 60) ? Math.floor(t.driveMin / 60) + " h " : ""}${t.driveMin % 60 ? (t.driveMin % 60) + " min" : ""} i bil${t.driveKm ? ` · ${t.driveKm} km` : ""}`.replace(" h  i", " h i") : "" });
+  for (const t of T.transfers) items.push({ ms: t.when, local: t.whenLocal, icon: "🚗", tbd: !t.timed, what: t.title, info: t.driveMin ? `Cirka ${Math.floor(t.driveMin / 60) ? Math.floor(t.driveMin / 60) + " h " : ""}${t.driveMin % 60 ? (t.driveMin % 60) + " min" : ""} i bil${t.driveKm ? ` · ${t.driveKm} km` : ""}`.replace(" h  i", " h i") : "" });
   for (const h of T.hotels) {
     items.push({ ms: h.in, local: h.inLocal, icon: "🛏️", what: `Incheckning ${h.name}`, info: T.places[h.place].name });
     items.push({ ms: h.out, local: h.outLocal, icon: "🧳", what: `Utcheckning ${h.name}`, info: T.places[h.place].name });
@@ -457,7 +457,7 @@ function renderTimeline() {
     for (const i of list) {
       const t = hhmm(i.local);
       const thumb = /Bröllop|Mottagning/.test(i.what) ? `<img class="thumb" src="assets/places/venue-gulabnagri${/Mottagning/.test(i.what) ? "-night" : ""}.jpg" alt="" loading="lazy">` : "";
-      wrap.appendChild(el("div", "item glass", `<div class="t${t ? "" : " none"}">${t || "hela dagen"}</div><div><div class="what">${i.icon} ${esc(i.what)}</div>${i.info ? `<div class="info">${esc(i.info)}</div>` : ""}${thumb}</div>`));
+      wrap.appendChild(el("div", "item glass", `<div class="t${t ? "" : " none"}">${t || (i.tbd ? "TBD" : "hela dagen")}</div><div><div class="what">${i.icon} ${esc(i.what)}</div>${i.info ? `<div class="info">${esc(i.info)}</div>` : ""}${thumb}</div>`));
     }
     g.appendChild(wrap); box.appendChild(g);
   }
