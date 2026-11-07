@@ -182,3 +182,7 @@ button:active { transform: scale(.94); }
 /* the globe takes every touch that starts on it (rotate, pinch); the page scrolls from anywhere else */
 .hero { overscroll-behavior: contain; }
 @media (max-width: 760px) { #globe { height: min(100vw, 520px); } }
+
+.card.tbd { border-style: dashed; }
+.card.tbd .photo { filter: grayscale(.7) brightness(.8); }
+.tag.tbd { background: rgba(255,255,255,.1); color: var(--muted); }

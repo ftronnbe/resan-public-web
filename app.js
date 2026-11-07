@@ -104,6 +104,33 @@ function whereAt(now) {
   return { place };
 }
 
+/* Real tracks of recent flights with the same numbers (OpenSky), as in the app; flights without one follow the great circle. */
+let TRACKS = {};
+const ROAD_LA = [[98.9862, 8.0991], [99.005, 8.1], [99.07, 8.069], [99.159, 8.008], [99.204, 7.974], [99.211, 7.927], [99.204, 7.832], [99.187, 7.731], [99.153, 7.69], [99.115, 7.66], [99.07, 7.64], [99.0233, 7.6448]];
+
+async function loadRoutes() {
+  try { TRACKS = await (await fetch("assets/routes.json")).json(); legs = buildLegs(); } catch (_) {}
+}
+
+/** The line a leg follows on the globe, from the start to the end. */
+function pathOf(l) {
+  if (l.kind === "fly") {
+    const t = TRACKS[l.flight.number.replace(" ", "")];
+    if (t && t.length > 3) return [coord(l.from), ...t, coord(l.to)];
+  }
+  if ((l.from === "KBV" && l.to === "LANTA") || (l.from === "LANTA" && l.to === "KBV")) return l.from === "KBV" ? ROAD_LA : [...ROAD_LA].reverse();
+  return [coord(l.from), coord(l.to)];
+}
+
+/** The point a fraction of the way along a line of [lon, lat] points. */
+function along(path, f) {
+  const d = []; let total = 0;
+  for (let i = 0; i + 1 < path.length; i++) { const x = d3.geoDistance(path[i], path[i + 1]); d.push(x); total += x; }
+  let t = Math.max(0, Math.min(1, f)) * total;
+  for (let i = 0; i < d.length; i++) { if (t <= d[i] || i === d.length - 1) return d3.geoInterpolate(path[i], path[i + 1])(d[i] ? Math.min(1, t / d[i]) : 1); t -= d[i]; }
+  return path[0];
+}
+
 const coord = (id) => { const p = T.places[id === "KBV" ? "KBV" : id]; return [p.lon, p.lat]; };
 
 /* ---------- Live flight times (read from the family's own status service, never from the browser to a flight API) ---------- */
@@ -137,6 +164,7 @@ function start(data) {
   initGlobe();
   loadWeather();
   loadStatus(); setInterval(loadStatus, 120000);
+  loadRoutes();
 }
 
 function tick() { renderStatus(); updateClocks(); }
@@ -158,7 +186,7 @@ function placeOfText(t) {
 function buildSegments() {
   const segs = [];
   const flights = [...T.flights].sort((a, b) => a.dep - b.dep);
-  for (const f of flights) segs.push({ kind: "flight", start: f.dep, end: f.arr, from: f.from, to: f.to, label: `${f.number} ${T.places[f.from].name} → ${T.places[f.to].name}`, f });
+  for (const f of flights) segs.push({ kind: "flight", flight: f, start: f.dep, end: f.arr, from: f.from, to: f.to, label: `${f.number} ${T.places[f.from].name} → ${T.places[f.to].name}`, f });
   for (let i = 0; i + 1 < flights.length; i++) {
     const a = flights[i], b = flights[i + 1];
     if (a.to === b.from && b.dep - a.arr < 14 * H) segs.push({ kind: "layover", start: a.arr, end: b.dep, place: a.to, next: b });
@@ -208,7 +236,7 @@ function computeActivity(now) {
   const ease = (x) => x * x * (3 - 2 * x);
   let pos, place = null, zoom = 1.6;
   if (cur && (cur.kind === "flight" || cur.kind === "car" || cur.kind === "transfer")) {
-    pos = d3.geoInterpolate(coord(cur.from), coord(cur.to))(cur.kind === "flight" ? frac : ease(frac)); zoom = ZOOM[cur.kind];
+    pos = along(pathOf({ ...cur, kind: cur.kind === "flight" ? "fly" : cur.kind }), cur.kind === "flight" ? frac : ease(frac)); zoom = ZOOM[cur.kind];
     if (cur.kind === "transfer") place = cur.to;
   } else if (cur) { pos = coord(cur.place); place = cur.place; zoom = ZOOM[cur.kind]; }
   else { const w = whereAt(now); place = w.place || null; pos = coord(place || "ARN"); zoom = 2.2; }
@@ -374,6 +402,9 @@ function renderFlights() {
   stagger(box, 70);
 }
 
+/** Stays that are planned but not booked yet. */
+const TBD_STAYS = [{ place: "NASHIK", inLocal: "2026-11-24", outLocal: "2026-11-26", photo: "nashik" }];
+
 function renderHotels() {
   const box = $("hotels"); box.innerHTML = ""; const now = Date.now();
   const seen = new Map();
@@ -388,6 +419,15 @@ function renderHotels() {
       <div class="sub">${cap(dayLabel(h.inLocal))} till ${dayLabel(h.outLocal)}</div>`;
     box.appendChild(n);
   }
+  for (const t of TBD_STAYS) {
+    const nights = Math.round((new Date(t.outLocal) - new Date(t.inLocal)) / 864e5), p = T.places[t.place];
+    const n = el("div", "card glass has-photo tbd");
+    n.innerHTML = `<img class="photo" src="assets/places/${t.photo}.jpg" alt="${esc(p.name)}" loading="lazy">
+      <div class="row"><span class="num" style="font-size:18px">Hotell i ${esc(p.name)}</span><span class="tag tbd">TBD</span></div>
+      <div class="route">${esc(p.name)}, ${esc(p.country)}</div>
+      <div class="sub">${cap(dayLabel(t.inLocal))} till ${dayLabel(t.outLocal)} · ${nights} nätter · hotellet är inte bestämt än</div>`;
+    box.appendChild(n);
+  }
   stagger(box, 80);
 }
 
@@ -400,6 +440,9 @@ function renderTimeline() {
   for (const h of T.hotels) {
     items.push({ ms: h.in, local: h.inLocal, icon: "🛏️", what: `Incheckning ${h.name}`, info: T.places[h.place].name });
     items.push({ ms: h.out, local: h.outLocal, icon: "🧳", what: `Utcheckning ${h.name}`, info: T.places[h.place].name });
+  }
+  for (const t of TBD_STAYS) {
+    items.push({ ms: new Date(t.inLocal + "T15:00:00Z").getTime(), local: t.inLocal, icon: "🛏️", what: `Hotell i ${T.places[t.place].name}: TBD`, info: "Inte bestämt än" });
   }
   for (const e of T.events) items.push({ ms: e.start, local: e.startLocal, icon: "🎉", what: e.title, info: e.place });
   items.sort((a, b) => a.ms - b.ms);
@@ -524,7 +567,7 @@ async function initGlobe() {
     if (land) { ctx.beginPath(); path(land); ctx.fillStyle = "#2c4a72"; ctx.fill(); ctx.strokeStyle = "rgba(160,200,255,.25)"; ctx.lineWidth = 0.6; ctx.stroke(); }
     // legs
     for (const l of legs) {
-      const line = { type: "LineString", coordinates: [coord(l.from), coord(l.to)] };
+      const line = { type: "LineString", coordinates: pathOf(l) };
       const done = now >= l.end, live = now >= l.start && now < l.end;
       ctx.beginPath(); path(line);
       ctx.setLineDash(done || live ? [] : [2, 5]);
@@ -550,10 +593,11 @@ async function initGlobe() {
     if (planeLeg) planeF = (now - planeLeg.start) / (planeLeg.end - planeLeg.start);
     else if (flyLegs.length) { const per = 6500, t = (now % (per * flyLegs.length)) / per; planeLeg = flyLegs[Math.floor(t)]; const x = t - Math.floor(t); planeF = x * x * (3 - 2 * x); }
     if (planeLeg) {
-      const a = coord(planeLeg.from), b = coord(planeLeg.to), at = d3.geoInterpolate(a, b);
+      const line = pathOf(planeLeg), at = (f) => along(line, f);
       const p0 = at(planeF), p1 = at(Math.min(1, planeF + 0.012)), back = at(Math.max(0, planeF - 0.25));
       if (d3.geoDistance(p0, [-rotation[0], -rotation[1]]) < Math.PI / 2 - 0.02) {
-        ctx.beginPath(); path({ type: "LineString", coordinates: [back, p0] }); ctx.strokeStyle = "rgba(255,255,255,.85)"; ctx.lineWidth = 2.2; ctx.shadowColor = "#54ccff"; ctx.shadowBlur = 12; ctx.stroke(); ctx.shadowBlur = 0;
+        const trail = Array.from({ length: 16 }, (_, i) => at(Math.max(0, planeF - 0.25) + (planeF - Math.max(0, planeF - 0.25)) * i / 15));
+        ctx.beginPath(); path({ type: "LineString", coordinates: trail }); ctx.strokeStyle = "rgba(255,255,255,.85)"; ctx.lineWidth = 2.2; ctx.shadowColor = "#54ccff"; ctx.shadowBlur = 12; ctx.stroke(); ctx.shadowBlur = 0;
         const [x, y] = proj(p0), [x2, y2] = proj(p1);
         drawPlane(ctx, x, y, Math.atan2(y2 - y, x2 - x), 1.15);
       }
