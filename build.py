@@ -68,7 +68,8 @@ def derive(user, password, salt):
     return hashlib.pbkdf2_hmac("sha256", f"{user.strip().lower()}:{password}".encode(), salt, ITERATIONS, dklen=64)
 
 def encrypt(plain, user, password):
-    salt, iv = os.urandom(16), os.urandom(16)
+    # The salt is fixed so a key saved on a device keeps working after every rebuild (the IV still changes).
+    salt, iv = hashlib.sha256(b"resan-web-salt-v1").digest()[:16], os.urandom(16)
     key = derive(user, password, salt)
     enc, mac = key[:32], key[32:]
     ct = subprocess.run(["openssl", "enc", "-aes-256-cbc", "-K", enc.hex(), "-iv", iv.hex()], input=plain, capture_output=True, check=True).stdout

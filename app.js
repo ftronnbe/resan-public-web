@@ -31,14 +31,14 @@ async function tryLogin(user, pass) {
   const blob = await loadBlob();
   const bits = await deriveKey(user, pass, blob);
   const data = await decrypt(bits, blob);
-  try { sessionStorage.setItem("resan.k", toB64(bits)); } catch (_) {}
+  try { localStorage.setItem("resan.k", toB64(bits)); } catch (_) {}
   return data;
 }
 
 async function resume() {
-  let k; try { k = sessionStorage.getItem("resan.k"); } catch (_) {}
+  let k; try { k = localStorage.getItem("resan.k"); } catch (_) {}
   if (!k) return null;
-  try { return await decrypt(b64(k).buffer, await loadBlob()); } catch (_) { return null; }
+  try { return await decrypt(b64(k).buffer, await loadBlob()); } catch (_) { try { localStorage.removeItem("resan.k"); } catch (_) {} return null; }
 }
 
 $("loginForm").addEventListener("submit", async (e) => {
@@ -66,7 +66,7 @@ function showTab(id) {
   if (id === "plan") requestAnimationFrame(scrollPlanToNow);
   requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
 }
-$("logout").addEventListener("click", () => { try { sessionStorage.removeItem("resan.k"); } catch (_) {} location.reload(); });
+$("logout").addEventListener("click", () => { try { localStorage.removeItem("resan.k"); } catch (_) {} location.reload(); });
 resume().then((d) => { if (d) start(d); });
 
 /* ---------- Helpers ---------- */
