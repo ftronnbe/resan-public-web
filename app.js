@@ -86,6 +86,24 @@ function whereAt(now) {
 
 const coord = (id) => { const p = T.places[id === "KBV" ? "KBV" : id]; return [p.lon, p.lat]; };
 
+/* ---------- Live flight times (read from the family's own status service, never from the browser to a flight API) ---------- */
+
+const STATUS_URL = "https://tmqpfgmqywipbjqgkbtz.supabase.co/functions/v1/flight-public";
+
+async function loadStatus() {
+  try {
+    const r = await (await fetch(STATUS_URL, { cache: "no-store" })).json();
+    for (const st of r.flights || []) {
+      const f = T.flights.find((x) => x.number.replace(" ", "") === String(st.number).replace(" ", ""));
+      if (!f || !st.known) continue;
+      f.live = st;
+      if (st.dep) f.dep = st.dep;
+      if (st.arr) f.arr = st.arr;
+    }
+    legs = buildLegs(); renderFlights(); renderStatus();
+  } catch (_) { /* the plan's own times are shown */ }
+}
+
 /* ---------- Page ---------- */
 
 function start(data) {
@@ -94,9 +112,11 @@ function start(data) {
   $("title").textContent = T.title;
   document.title = "Resan";
   renderPlaces(); renderFlights(); renderHotels(); renderTimeline();
+  T.flights.forEach((f) => { f.depPlan = f.dep; f.arrPlan = f.arr; });
   tick(); setInterval(tick, 1000);
   initGlobe();
   loadWeather();
+  loadStatus(); setInterval(loadStatus, 120000);
 }
 
 function tick() { renderStatus(); updateClocks(); }
@@ -195,15 +215,33 @@ async function loadWeather() {
 
 /* ---------- Flights, hotels, timeline ---------- */
 
+function flightBadge(f, live) {
+  const st = f.live;
+  if (live) return `<span class="tag live">I luften</span>`;
+  if (!st) return `<span class="tag fly">${esc(f.airline)}</span>`;
+  if (st.phase === "cancelled") return `<span class="tag late">Inställt</span>`;
+  if (st.phase === "landed") return `<span class="tag fly">Landat</span>`;
+  if (st.delayMinutes >= 10) return `<span class="tag late">Försenat ${st.delayMinutes} min</span>`;
+  return `<span class="tag ok">I tid</span>`;
+}
+
+function timeBlock(ms, plannedMs, zone, local, label) {
+  const now = fmt(ms, zone, { hour: "2-digit", minute: "2-digit" }), plan = fmt(plannedMs, zone, { hour: "2-digit", minute: "2-digit" });
+  const changed = now !== plan;
+  return `<b>${changed ? `<s class="old">${plan}</s> <span class="new">${now}</span>` : now}</b><span>${cap(dayLabel(local))} · ${esc(label)}</span>`;
+}
+
 function renderFlights() {
   const box = $("flights"); box.innerHTML = ""; const now = Date.now();
   for (const f of T.flights) {
     const live = now >= f.dep && now <= f.arr, past = now > f.arr;
+    const st = f.live, gate = st && (st.depGate || st.depTerminal) ? `Terminal ${esc(st.depTerminal || "?")}${st.depGate ? `, gate ${esc(st.depGate)}` : ""}` : "";
     const n = el("div", `card glass${past ? " past" : ""}`);
-    n.innerHTML = `<div class="row"><span class="num">${esc(f.number)}</span><span class="tag ${live ? "live" : "fly"}">${live ? "I luften" : esc(f.airline)}</span></div>
+    n.innerHTML = `<div class="row"><span class="num">${esc(f.number)}</span>${flightBadge(f, live)}</div>
       <div class="route">${esc(T.places[f.from === "KBV" ? "KBV" : f.from].name)} → ${esc(T.places[f.to].name)}</div>
-      <div class="times"><div><b>${hhmm(f.depLocal)}</b><span>${cap(dayLabel(f.depLocal))} · ${esc(f.fromName)}</span></div><div style="text-align:right"><b>${hhmm(f.arrLocal)}</b><span>${cap(dayLabel(f.arrLocal))} · ${esc(f.toName)}</span></div></div>
-      ${f.aircraft ? `<div class="sub">${esc(f.aircraft)}</div>` : ""}`;
+      <div class="times"><div>${timeBlock(f.dep, f.depPlan ?? f.dep, f.depZone, f.depLocal, f.fromName)}</div><div style="text-align:right">${timeBlock(f.arr, f.arrPlan ?? f.arr, f.arrZone, f.arrLocal, f.toName)}</div></div>
+      <div class="sub">${esc(f.airline)}${f.aircraft ? ` · ${esc(f.aircraft)}` : ""}${gate ? ` · ${gate}` : ""}</div>
+      ${st ? `<div class="sub live-note">Uppdaterad ${fmt(Date.parse(st.updatedAt), "Europe/Stockholm", { hour: "2-digit", minute: "2-digit" })} svensk tid</div>` : ""}`;
     box.appendChild(n);
   }
 }
@@ -262,6 +300,18 @@ function sameDay(d) {
 }
 
 /* ---------- Globe ---------- */
+
+/** A small airliner seen from above, nose pointing along `angle`. */
+function drawPlane(ctx, x, y, angle, scale) {
+  const half = [[13, 0], [6, -2.2], [-1, -13], [-5, -13], [-2.5, -2.4], [-9, -1.8], [-11.5, -5.4], [-14, -5.4], [-12.5, 0]];
+  ctx.save(); ctx.translate(x, y); ctx.rotate(angle); ctx.scale(scale, scale);
+  ctx.beginPath();
+  half.forEach(([px, py], i) => (i ? ctx.lineTo(px, py) : ctx.moveTo(px, py)));
+  [...half].reverse().forEach(([px, py]) => ctx.lineTo(px, -py));
+  ctx.closePath(); ctx.fillStyle = "#fff"; ctx.shadowColor = "rgba(84,204,255,.9)"; ctx.shadowBlur = 10; ctx.fill();
+  ctx.shadowBlur = 0; ctx.strokeStyle = "rgba(10,24,48,.6)"; ctx.lineWidth = 0.8; ctx.stroke();
+  ctx.restore();
+}
 
 let rotation = [-40, -20, 0], dragging = false, lastTouch = 0, land = null;
 
@@ -341,6 +391,20 @@ async function initGlobe() {
       ctx.font = "600 12px Figtree, system-ui, sans-serif"; ctx.fillStyle = "rgba(255,255,255,.9)"; ctx.textAlign = "left";
       const dy = { NASHIK: -8, BOM: 12, KBV: 4, LANTA: 12 }[id] ?? 4;
       ctx.fillText(T.places[id].name, x + 10, y + dy);
+    }
+    // the plane: the real one while a flight is on, otherwise one that shows the whole route again and again
+    const flyLegs = legs.filter((l) => l.kind === "fly");
+    let planeLeg = flyLegs.find((l) => now >= l.start && now < l.end), planeF;
+    if (planeLeg) planeF = (now - planeLeg.start) / (planeLeg.end - planeLeg.start);
+    else if (flyLegs.length) { const per = 6500, t = (now % (per * flyLegs.length)) / per; planeLeg = flyLegs[Math.floor(t)]; const x = t - Math.floor(t); planeF = x * x * (3 - 2 * x); }
+    if (planeLeg) {
+      const a = coord(planeLeg.from), b = coord(planeLeg.to), at = d3.geoInterpolate(a, b);
+      const p0 = at(planeF), p1 = at(Math.min(1, planeF + 0.012)), back = at(Math.max(0, planeF - 0.25));
+      if (d3.geoDistance(p0, [-rotation[0], -rotation[1]]) < Math.PI / 2 - 0.02) {
+        ctx.beginPath(); path({ type: "LineString", coordinates: [back, p0] }); ctx.strokeStyle = "rgba(255,255,255,.85)"; ctx.lineWidth = 2.2; ctx.shadowColor = "#54ccff"; ctx.shadowBlur = 12; ctx.stroke(); ctx.shadowBlur = 0;
+        const [x, y] = proj(p0), [x2, y2] = proj(p1);
+        drawPlane(ctx, x, y, Math.atan2(y2 - y, x2 - x), 1.15);
+      }
     }
     // the family
     if (d3.geoDistance(target.pos, [-rotation[0], -rotation[1]]) < Math.PI / 2) {
