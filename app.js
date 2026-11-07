@@ -276,7 +276,7 @@ function updateClocks() {
   const se = new Date(now);
   for (const id of SHOWN) {
     const p = T.places[id];
-    document.querySelector(`[data-clock="${id}"]`).innerHTML = fmt(now, p.zone, { hour: "2-digit", minute: "2-digit" }).replace(":", '<span class="colon">:</span>');
+    { const c = document.querySelector(`[data-clock="${id}"]`), t = fmt(now, p.zone, { hour: "2-digit", minute: "2-digit" }); if (c.textContent !== t) c.textContent = t; }
     const off = (tzOffset(p.zone, se) - tzOffset("Europe/Stockholm", se)) / 60;
     const diff = id === "ARN" ? "hemma" : off === 0 ? "samma tid som hemma" : `${off > 0 ? "+" : "−"}${Math.abs(off).toString().replace(".", ",")} h från hemma`;
     document.querySelector(`[data-day="${id}"]`).textContent = `${cap(fmt(now, p.zone, { weekday: "long" }))} · ${diff}`;
