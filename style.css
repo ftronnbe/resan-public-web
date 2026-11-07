@@ -120,7 +120,8 @@ h2 { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: v
 .status .pill.live { background: rgba(255,184,107,.18); color: var(--amber); }
 .place.away { opacity: .5; filter: saturate(.6); }
 .place.here { transform: scale(1.015); }
-.place.here .name::after { content: "Vi är här"; margin-left: 8px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #1a1204; background: var(--amber); padding: 2px 8px; border-radius: 999px; vertical-align: 2px; }
+.place .name { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.place.here .name::after { content: "Vi är här"; display: inline-block; white-space: nowrap; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #1a1204; background: var(--amber); padding: 3px 10px; border-radius: 999px; line-height: 1.3; }
 .note { color: var(--muted); font-size: 14px; margin: -2px 0 14px; }
 .note b { color: var(--fg); }
 .times .loc { display: block; font-size: 11px; letter-spacing: .04em; color: var(--sky); margin-top: 2px; }
@@ -159,7 +160,6 @@ button:active { transform: scale(.94); }
 @media (hover: hover) {
   .place:hover, .card:hover, .item:hover { transform: translateY(-3px); box-shadow: 0 16px 40px rgba(0,0,0,.35); }
 }
-.place .clock .colon { animation: blink 1s steps(1) infinite; }
 .place.here { animation: rise .6s both, pulseGlow 3.2s 1s ease-in-out infinite; border-color: rgba(255,184,107,.8); }
 .place .wx .e { display: inline-block; animation: bob 4.5s ease-in-out infinite; }
 .place .wx .muted { background: linear-gradient(90deg, transparent, rgba(255,255,255,.18), transparent) 200% 0 / 200% 100% no-repeat; -webkit-background-clip: text; background-clip: text; animation: shimmer 1.6s linear infinite; }
