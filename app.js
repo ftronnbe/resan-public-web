@@ -1,5 +1,8 @@
 "use strict";
 
+// ?now=2026-11-14T03:30:00Z shows the page as it will look at that moment (handy for trying the trip out).
+{ const q = new URLSearchParams(location.search).get("now"); if (q && !Number.isNaN(Date.parse(q))) { const off = Date.parse(q) - Date.now(), real = Date.now.bind(Date); Date.now = () => real() + off; } }
+
 /* ---------- Login: the data file is encrypted with a key made from username and password ---------- */
 
 const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
@@ -43,12 +46,13 @@ $("loginForm").addEventListener("submit", async (e) => {
   const btn = $("loginBtn"), err = $("loginError");
   btn.disabled = true; btn.textContent = "Loggar in…"; err.hidden = true;
   try { start(await tryLogin($("user").value, $("pass").value)); }
-  catch (_) { err.textContent = "Fel användarnamn eller lösenord."; err.hidden = false; }
+  catch (_) { err.textContent = "Fel användarnamn eller lösenord."; err.hidden = false; const card = $("loginForm"); card.classList.remove("bad"); void card.offsetWidth; card.classList.add("bad"); }
   btn.disabled = false; btn.textContent = "Logga in";
 });
 document.querySelectorAll(".tabbar button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
 function showTab(id) {
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.id === `tab-${id}`));
+  const shown = document.getElementById(`tab-${id}`); if (shown) shown.querySelectorAll(".rise").forEach((n) => { n.style.animation = "none"; void n.offsetWidth; n.style.animation = ""; });
   document.querySelectorAll(".tabbar button").forEach((x) => x.classList.toggle("on", x.dataset.tab === id));
   window.scrollTo({ top: 0 });
   requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
@@ -63,6 +67,15 @@ const fmt = (ms, zone, opts) => new Intl.DateTimeFormat(SV, { timeZone: zone, ..
 const dayLabel = (iso) => new Intl.DateTimeFormat(SV, { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" }).format(new Date(iso.slice(0, 10) + "T12:00:00Z")).replace(".", "");
 const hhmm = (iso) => (iso.includes("T") ? iso.slice(11, 16) : null);
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+/** Gives the children of a container their place in a staggered entrance. */
+function stagger(box, step = 55) { [...box.children].forEach((c, i) => { c.classList.add("rise"); c.style.setProperty("--i", i); c.style.animationDelay = `${i * step}ms`; }); }
+
+let revealer;
+function revealOnScroll(nodes) {
+  revealer = revealer || new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("in"); revealer.unobserve(e.target); } }), { threshold: 0.12 });
+  nodes.forEach((n) => { n.classList.add("reveal"); revealer.observe(n); });
+}
+
 const el = (tag, cls, html) => { const n = document.createElement(tag); if (cls) n.className = cls; if (html != null) n.innerHTML = html; return n; };
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
@@ -128,24 +141,115 @@ function start(data) {
 
 function tick() { renderStatus(); updateClocks(); }
 
+const H = 3600e3, MIN = 60e3;
+
+/** Which of the trip's places a text is about (an airport, a hotel or a city). */
+function placeOfText(t) {
+  const x = t.toLowerCase();
+  if (x.includes("krabi")) return "KBV";
+  if (x.includes("twin bay") || x.includes("lanta")) return "LANTA";
+  if (x.includes("grande") || x.includes("bangkok")) return "BKK";
+  if (x.includes("fairmont") || x.includes("mumbai")) return "BOM";
+  if (x.includes("nashik")) return "NASHIK";
+  return null;
+}
+
+/** Everything that fills the trip's time, with estimates where the plan has none (immigration, drive times, airport margins). */
+function buildSegments() {
+  const segs = [];
+  const flights = [...T.flights].sort((a, b) => a.dep - b.dep);
+  for (const f of flights) segs.push({ kind: "flight", start: f.dep, end: f.arr, from: f.from, to: f.to, label: `${f.number} ${T.places[f.from].name} → ${T.places[f.to].name}`, f });
+  for (let i = 0; i + 1 < flights.length; i++) {
+    const a = flights[i], b = flights[i + 1];
+    if (a.to === b.from && b.dep - a.arr < 14 * H) segs.push({ kind: "layover", start: a.arr, end: b.dep, place: a.to, next: b });
+  }
+  for (const t of T.transfers) {
+    const from = placeOfText(t.from), to = placeOfText(t.to);
+    if (!from || !to) continue;
+    if (/^Hämtning/.test(t.title)) {                       // from the airport to the hotel, after landing and passport control
+      const f = flights.find((x) => x.to === from && Math.abs(x.arr - t.when) < 36 * H); if (!f) continue;
+      const start = f.arr + 40 * MIN, dur = (to === "LANTA" ? 90 : 25) * MIN;
+      segs.push({ kind: "transfer", start, end: start + dur, from, to, label: t.title.replace(/^Hämtning /, "Transfer ") });
+    } else if (/flygplats/i.test(t.to)) {                  // from the hotel to the airport, in time for check-in
+      const f = flights.find((x) => x.from === to && Math.abs(x.dep - t.when) < 36 * H); if (!f) continue;
+      const end = f.dep - 2.5 * H;
+      segs.push({ kind: "transfer", start: end - 90 * MIN, end, from, to, label: t.title });
+    }
+  }
+  for (const f of flights) segs.push({ kind: "arrival", start: f.arr, end: f.arr + 40 * MIN, place: f.to === "KBV" ? "KBV" : f.to, f });
+  const stays = new Map();
+  for (const h of T.hotels) { const e = stays.get(h.name) || { ...h }; e.out = Math.max(e.out, h.out); stays.set(h.name, e); }
+  for (const h of stays.values()) {
+    // The stay starts when the family is there: at check-in, or after landing and the drive if that is later.
+    const city = h.place === "LANTA" ? "KBV" : h.place;
+    const f = flights.find((x) => x.to === city && x.arr > h.in - 14 * H && x.arr < h.out);
+    const reach = f ? f.arr + (h.place === "LANTA" ? 130 : 65) * MIN : 0;
+    segs.push({ kind: "hotel", start: f ? reach : h.in, end: h.out, place: h.place, hotel: h });
+  }
+  for (const e of T.events) segs.push({ kind: "event", start: e.start, end: e.start + (/Bröllop:/.test(e.title) ? 4 : 4) * H, place: "NASHIK", event: e });
+  return segs;
+}
+
+const RANK = { flight: 5, car: 5, arrival: 4, transfer: 4, event: 3, layover: 2, hotel: 1 };
+const ZOOM = { flight: 2.2, car: 2.0, arrival: 3.0, transfer: 3.0, event: 3.2, layover: 3.0, hotel: 3.0 };
+
+/** What the family is doing right now, where on the globe that is, and how close to zoom. */
+let actMemo = { at: 0, v: null };
+function activityAt(now) {
+  if (actMemo.v && Math.abs(now - actMemo.at) < 400) return actMemo.v;
+  actMemo = { at: now, v: computeActivity(now) }; return actMemo.v;
+}
+
+function computeActivity(now) {
+  const segs = [...buildSegments(), ...legs.filter((l) => l.kind === "car").map((l) => ({ kind: "car", start: l.start, end: l.end, from: l.from, to: l.to, label: l.label }))];
+  const cur = segs.filter((x) => now >= x.start && now < x.end).sort((a, b) => RANK[b.kind] - RANK[a.kind])[0];
+  const next = segs.filter((x) => x.start > now && (x.kind === "flight" || x.kind === "car" || x.kind === "transfer")).sort((a, b) => a.start - b.start)[0];
+  const frac = cur ? Math.min(1, Math.max(0, (now - cur.start) / (cur.end - cur.start))) : 0;
+  const ease = (x) => x * x * (3 - 2 * x);
+  let pos, place = null, zoom = 1.6;
+  if (cur && (cur.kind === "flight" || cur.kind === "car" || cur.kind === "transfer")) {
+    pos = d3.geoInterpolate(coord(cur.from), coord(cur.to))(cur.kind === "flight" ? frac : ease(frac)); zoom = ZOOM[cur.kind];
+    if (cur.kind === "transfer") place = cur.to;
+  } else if (cur) { pos = coord(cur.place); place = cur.place; zoom = ZOOM[cur.kind]; }
+  else { const w = whereAt(now); place = w.place || null; pos = coord(place || "ARN"); zoom = 2.2; }
+  if (now < T.start) { pos = coord("ARN"); place = "ARN"; zoom = 1; }
+  return { cur, next, frac, pos, place: place === "KBV" ? "LANTA" : place, zoom };
+}
+
+const when = (ms, zone, opts = {}) => cap(fmt(ms, zone, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", ...opts }));
+const left = (ms) => { const h = Math.floor(ms / H), m = Math.floor(ms / MIN) % 60; return h > 0 ? `${h} h ${m} min` : `${m} min`; };
+
+function nextLine(act) {
+  const n = act.next; if (!n) return "";
+  const zone = n.f ? n.f.depZone : T.places[n.from]?.zone || "Europe/Stockholm";
+  return `Nästa: ${esc(n.label)}, ${when(n.start, zone)} lokal tid`;
+}
+
 function renderStatus() {
-  const now = Date.now(), box = $("status");
-  const nextLeg = legs.find((l) => l.start > now);
-  const w = whereAt(now);
+  const now = Date.now(), box = $("status"), act = activityAt(now), c = act.cur;
   let html;
   if (now < T.start) {
     const d = T.start - now, days = Math.floor(d / 864e5), h = Math.floor(d / 36e5) % 24, m = Math.floor(d / 6e4) % 60, s = Math.floor(d / 1e3) % 60;
     html = `<span class="pill">Snart avresa</span><div class="big">${days} dagar, ${h} h ${m} min ${String(s).padStart(2, "0")} s</div><div class="small">Till avgången från Arlanda fre 13 nov kl 13:00.</div>`;
   } else if (now > T.end + 864e5) {
     html = `<span class="pill">Hemma</span><div class="big">Tillbaka i Stockholm</div><div class="small">Tack för att ni följde med.</div>`;
-  } else if (w.moving) {
-    const l = w.moving, f = Math.min(1, Math.max(0, (now - l.start) / (l.end - l.start)));
-    const left = Math.max(0, l.end - now), hh = Math.floor(left / 36e5), mm = Math.floor(left / 6e4) % 60;
-    html = `<span class="pill">${l.kind === "fly" ? "I luften" : "På väg"}</span><div class="big">${esc(l.label)}</div><div class="small">${Math.round(f * 100)} % av vägen · ${hh} h ${mm} min kvar</div>`;
+  } else if (c && c.kind === "flight") {
+    html = `<span class="pill live">I luften</span><div class="big">${esc(c.label)}</div><div class="small">${Math.round(act.frac * 100)} % av vägen · ${left(c.end - now)} kvar · landar ${fmt(c.end, c.f.arrZone, { hour: "2-digit", minute: "2-digit" })} lokal tid</div>`;
+  } else if (c && c.kind === "car") {
+    html = `<span class="pill live">På väg</span><div class="big">${esc(c.label)}</div><div class="small">Bilfärd, ungefär ${left(c.end - now)} kvar</div>`;
+  } else if (c && c.kind === "transfer") {
+    html = `<span class="pill live">Transfer</span><div class="big">${esc(c.label)}</div><div class="small">Ungefär ${left(c.end - now)} kvar</div>`;
+  } else if (c && c.kind === "arrival") {
+    html = `<span class="pill live">Just landat</span><div class="big">Landat i ${esc(T.places[c.place].name)}</div><div class="small">Passkontroll och bagage${act.next ? `. ${nextLine(act)}` : ""}</div>`;
+  } else if (c && c.kind === "event") {
+    html = `<span class="pill live">Nu</span><div class="big">${esc(c.event.title)}</div><div class="small">${esc(c.event.place)}, Nashik · började ${fmt(c.event.start, c.event.zone, { hour: "2-digit", minute: "2-digit" })} lokal tid</div>`;
+  } else if (c && c.kind === "layover") {
+    html = `<span class="pill">Väntar på flygplatsen</span><div class="big">Flygplatsen i ${esc(T.places[c.place].name)}</div><div class="small">${esc(c.next.number)} till ${esc(T.places[c.next.to].name)} går ${fmt(c.next.dep, c.next.depZone, { hour: "2-digit", minute: "2-digit" })} lokal tid, om ${left(c.next.dep - now)}</div>`;
+  } else if (c && c.kind === "hotel") {
+    html = `<span class="pill">På hotellet</span><div class="big">${esc(c.hotel.name)}</div><div class="small">${esc(T.places[c.place].name)} · ${nextLine(act) || `utcheckning ${when(c.hotel.out, c.hotel.zone)}`}</div>`;
   } else {
-    const p = T.places[w.place];
-    const next = nextLeg ? `Nästa: ${esc(nextLeg.label)}, ${cap(fmt(nextLeg.start, nextLeg.flight ? nextLeg.flight.depZone : p.zone, { weekday: "short", day: "numeric", month: "short", hour: nextLeg.kind === "fly" ? "2-digit" : undefined, minute: nextLeg.kind === "fly" ? "2-digit" : undefined }))}` : "";
-    html = `<span class="pill">Just nu</span><div class="big">${esc(p.name)}, ${esc(p.country)}</div><div class="small">${next}</div>`;
+    const p = T.places[act.place || "ARN"];
+    html = `<span class="pill">Just nu</span><div class="big">${esc(p.name)}, ${esc(p.country)}</div><div class="small">${nextLine(act)}</div>`;
   }
   if (box.dataset.html !== html) { box.innerHTML = html; box.dataset.html = html; }
 }
@@ -164,18 +268,21 @@ function renderPlaces() {
     n.innerHTML = `<div class="name">${esc(p.name)}</div><div class="country">${esc(p.country)}</div><div class="clock" data-clock="${id}">--:--</div><div class="day" data-day="${id}"></div><div class="wx" data-wx="${id}"><span class="muted">Hämtar väder…</span></div>`;
     box.appendChild(n);
   }
+  stagger(box, 70);
 }
 
 function updateClocks() {
-  const now = Date.now(), here = whereAt(now);
+  const now = Date.now(), here = { place: activityAt(now).place };
   const se = new Date(now);
   for (const id of SHOWN) {
     const p = T.places[id];
-    document.querySelector(`[data-clock="${id}"]`).textContent = fmt(now, p.zone, { hour: "2-digit", minute: "2-digit" });
+    document.querySelector(`[data-clock="${id}"]`).innerHTML = fmt(now, p.zone, { hour: "2-digit", minute: "2-digit" }).replace(":", '<span class="colon">:</span>');
     const off = (tzOffset(p.zone, se) - tzOffset("Europe/Stockholm", se)) / 60;
     const diff = id === "ARN" ? "hemma" : off === 0 ? "samma tid som hemma" : `${off > 0 ? "+" : "−"}${Math.abs(off).toString().replace(".", ",")} h från hemma`;
     document.querySelector(`[data-day="${id}"]`).textContent = `${cap(fmt(now, p.zone, { weekday: "long" }))} · ${diff}`;
-    $(`place-${id}`).classList.toggle("here", here.place === id);
+    const card = $(`place-${id}`);
+    card.classList.toggle("here", here.place === id);
+    card.classList.toggle("away", !!here.place && here.place !== id);
   }
 }
 
@@ -240,10 +347,12 @@ function flightBadge(f, live) {
   return `<span class="tag ok">I tid</span>`;
 }
 
+const zoneName = (z) => z.split("/").pop().replace("_", " ").replace("Kolkata", "Indien").replace("Bangkok", "Thailand").replace("Stockholm", "Sverige").replace("Berlin", "Tyskland");
+
 function timeBlock(ms, plannedMs, zone, local, label) {
   const now = fmt(ms, zone, { hour: "2-digit", minute: "2-digit" }), plan = fmt(plannedMs, zone, { hour: "2-digit", minute: "2-digit" });
   const changed = now !== plan;
-  return `<b>${changed ? `<s class="old">${plan}</s> <span class="new">${now}</span>` : now}</b><span>${cap(dayLabel(local))} · ${esc(label)}</span>`;
+  return `<b>${changed ? `<s class="old">${plan}</s> <span class="new">${now}</span>` : now}</b><span>${cap(dayLabel(local))} · ${esc(label)}</span><span class="loc">lokal tid · ${esc(zoneName(zone))}</span>`;
 }
 
 function renderFlights() {
@@ -262,6 +371,7 @@ function renderFlights() {
       ${st ? `<div class="sub live-note">Uppdaterad ${fmt(Date.parse(st.updatedAt), "Europe/Stockholm", { hour: "2-digit", minute: "2-digit" })} svensk tid</div>` : ""}`;
     box.appendChild(n);
   }
+  stagger(box, 70);
 }
 
 function renderHotels() {
@@ -278,6 +388,7 @@ function renderHotels() {
       <div class="sub">${cap(dayLabel(h.inLocal))} till ${dayLabel(h.outLocal)}</div>`;
     box.appendChild(n);
   }
+  stagger(box, 80);
 }
 
 function renderTimeline() {
@@ -307,6 +418,7 @@ function renderTimeline() {
     }
     g.appendChild(wrap); box.appendChild(g);
   }
+  revealOnScroll([...box.querySelectorAll(".day-group")]);
 }
 
 function localToday() {
@@ -333,7 +445,7 @@ function drawPlane(ctx, x, y, angle, scale) {
   ctx.restore();
 }
 
-let rotation = [-40, -20, 0], dragging = false, lastTouch = 0, land = null;
+let rotation = [-40, -20, 0], dragging = false, lastTouch = 0, lastZoomTouch = 0, zoom = 1, land = null;
 
 async function initGlobe() {
   const canvas = $("globe");
@@ -348,7 +460,7 @@ async function initGlobe() {
   const resize = () => {
     const dpr = window.devicePixelRatio || 1, r = canvas.getBoundingClientRect();
     canvas.width = r.width * dpr; canvas.height = r.height * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    proj.translate([r.width / 2, r.height / 2]).scale(Math.min(r.width, r.height) * 0.43);
+    proj.translate([r.width / 2, r.height / 2]).scale(Math.min(r.width, r.height) * 0.47 * zoom);
   };
   resize(); window.addEventListener("resize", resize);
 
@@ -356,33 +468,42 @@ async function initGlobe() {
   let start = null;
   canvas.addEventListener("pointerdown", (e) => { dragging = true; start = { x: e.clientX, y: e.clientY, r: rotation.slice() }; canvas.setPointerCapture(e.pointerId); });
   canvas.addEventListener("pointermove", (e) => {
-    if (!dragging) return;
+    if (!dragging || pointers.size > 1) return;
     const k = 0.35; rotation = [start.r[0] + (e.clientX - start.x) * k, Math.max(-80, Math.min(80, start.r[1] - (e.clientY - start.y) * k)), 0]; lastTouch = Date.now();
   });
+  const setZoom = (z) => { zoom = Math.max(0.8, Math.min(8, z)); lastZoomTouch = Date.now(); lastTouch = Date.now(); };
+  canvas.addEventListener("wheel", (e) => { e.preventDefault(); setZoom(zoom * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0025))); }, { passive: false });
+  const pointers = new Map(); let pinch = null;
+  canvas.addEventListener("pointerdown", (e) => { pointers.set(e.pointerId, [e.clientX, e.clientY]); if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), z: zoom }; dragging = false; } });
+  canvas.addEventListener("pointermove", (e) => {
+    if (!pointers.has(e.pointerId)) return; pointers.set(e.pointerId, [e.clientX, e.clientY]);
+    if (pointers.size === 2 && pinch) { const [a, b] = [...pointers.values()]; setZoom(pinch.z * Math.hypot(a[0] - b[0], a[1] - b[1]) / pinch.d); }
+  });
+  const release = (e) => { pointers.delete(e.pointerId); if (pointers.size < 2) pinch = null; };
+  canvas.addEventListener("pointerup", release); canvas.addEventListener("pointercancel", release);
+  $("zin").addEventListener("click", () => setZoom(zoom * 1.5));
+  $("zout").addEventListener("click", () => setZoom(zoom / 1.5));
+  $("zhere").addEventListener("click", () => { lastZoomTouch = 0; lastTouch = 0; });
   const up = () => { dragging = false; lastTouch = Date.now(); };
   canvas.addEventListener("pointerup", up); canvas.addEventListener("pointercancel", up);
 
-  const planeAt = () => {
-    const now = Date.now(), w = whereAt(now);
-    if (w.moving) { const l = w.moving, f = (now - l.start) / (l.end - l.start); return { pos: d3.geoInterpolate(coord(l.from), coord(l.to))(Math.max(0, Math.min(1, f))), leg: l }; }
-    return { pos: coord(w.place === "LANTA" ? "LANTA" : w.place), leg: null };
-  };
-
   const frame = () => {
     const r = canvas.getBoundingClientRect(), W = r.width, H = r.height, now = Date.now();
-    const target = planeAt();
+    const act = activityAt(now), target = { pos: act.pos };
+    if (now - lastZoomTouch > 6000) zoom += (act.zoom - zoom) * 0.035;
+    proj.scale(Math.min(W, H) * 0.47 * zoom);
     if (!dragging && now - lastTouch > 3000) {
-      const goal = [-target.pos[0], -target.pos[1] * 0.7];
+      const goal = [-target.pos[0], -target.pos[1]];
       let dl = goal[0] - rotation[0]; dl = ((dl + 540) % 360) - 180;
-      rotation = [rotation[0] + dl * 0.03, rotation[1] + (goal[1] - rotation[1]) * 0.03, 0];
+      rotation = [rotation[0] + dl * 0.045, rotation[1] + (goal[1] - rotation[1]) * 0.045, 0];
     }
     proj.rotate(rotation);
     ctx.clearRect(0, 0, W, H);
-    for (const s of stars) { ctx.fillStyle = `rgba(255,255,255,${0.15 + s[2] * 0.25})`; ctx.fillRect(s[0] * W, s[1] * H, s[2], s[2]); }
+    for (const [i, s] of stars.entries()) { const tw = 0.5 + 0.5 * Math.sin(now / 900 + i * 1.7); ctx.fillStyle = `rgba(255,255,255,${(0.08 + s[2] * 0.2) * (0.4 + tw)})`; ctx.fillRect(s[0] * W, s[1] * H, s[2], s[2]); }
     const R = proj.scale();
     // glow
     const g = ctx.createRadialGradient(W / 2, H / 2, R * 0.9, W / 2, H / 2, R * 1.25);
-    g.addColorStop(0, "rgba(84,204,255,.28)"); g.addColorStop(1, "rgba(84,204,255,0)");
+    g.addColorStop(0, `rgba(84,204,255,${0.24 + 0.06 * Math.sin(now / 1400)})`); g.addColorStop(1, "rgba(84,204,255,0)");
     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(W / 2, H / 2, R * 1.25, 0, 7); ctx.fill();
     // ocean
     const o = ctx.createRadialGradient(W / 2 - R * 0.3, H / 2 - R * 0.3, R * 0.1, W / 2, H / 2, R);

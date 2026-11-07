@@ -41,6 +41,11 @@
   <div id="tab-overview" class="tab active">
     <section class="hero">
       <canvas id="globe" aria-label="Jordglob med resvägen"></canvas>
+      <div class="zoomctl" aria-label="Zooma globen">
+        <button id="zin" type="button" aria-label="Zooma in">+</button>
+        <button id="zout" type="button" aria-label="Zooma ut">−</button>
+        <button id="zhere" type="button" aria-label="Följ familjen"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></button>
+      </div>
       <div class="status glass" id="status"></div>
     </section>
   </div>
@@ -54,7 +59,7 @@
   </div>
 
   <div id="tab-flights" class="tab">
-    <section class="wrap"><h2>Flygen</h2><div class="cards" id="flights"></div></section>
+    <section class="wrap"><h2>Flygen</h2><p class="note">Alla tider är <b>lokal tid</b> på platsen: avgång i avgångsorten, ankomst i ankomstorten.</p><div class="cards" id="flights"></div></section>
   </div>
 
   <div id="tab-hotels" class="tab">
